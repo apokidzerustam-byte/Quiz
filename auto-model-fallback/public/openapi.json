@@ -1,0 +1,172 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Auto Model Fallback Chat API",
+    "version": "1.0.0",
+    "description": "Public Chat Completions-compatible endpoint. Routes requests through configured free-tier providers in priority order. No API key or authentication is required. Do not send secrets or sensitive personal data. This is an external model API and does not replace ChatGPT's internal model or bypass ChatGPT plan limits."
+  },
+  "servers": [
+    {
+      "url": "https://auto-model-fallback.vercel.app"
+    }
+  ],
+  "paths": {
+    "/api/chat": {
+      "post": {
+        "operationId": "createChatCompletion",
+        "summary": "Send conversation messages to the free-model fallback router",
+        "description": "Submit an ordered conversation as messages. Each message has role (system, developer, user, or assistant) and string content. The service tries OpenRouter free, Groq free, then Gemini free. Public endpoint with no authentication; requests are subject to best-effort rate limiting and size limits.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "messages"
+                ],
+                "properties": {
+                  "messages": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 32,
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "role",
+                        "content"
+                      ],
+                      "properties": {
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "system",
+                            "developer",
+                            "user",
+                            "assistant"
+                          ],
+                          "description": "Conversation speaker."
+                        },
+                        "content": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 20000,
+                          "description": "Plain-text message content."
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "example": {
+                "messages": [
+                  {
+                    "role": "system",
+                    "content": "Answer clearly and concisely."
+                  },
+                  {
+                    "role": "user",
+                    "content": "Explain what an API fallback router does."
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful completion",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "object",
+                    "created",
+                    "model",
+                    "choices"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "object": {
+                      "type": "string",
+                      "enum": [
+                        "chat.completion"
+                      ]
+                    },
+                    "created": {
+                      "type": "integer"
+                    },
+                    "model": {
+                      "type": "string"
+                    },
+                    "choices": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "index": {
+                            "type": "integer"
+                          },
+                          "message": {
+                            "type": "object",
+                            "properties": {
+                              "role": {
+                                "type": "string",
+                                "enum": [
+                                  "assistant"
+                                ]
+                              },
+                              "content": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "finish_reason": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "provider": {
+                      "type": "string"
+                    },
+                    "upstream_model": {
+                      "type": "string"
+                    },
+                    "fallback_attempts": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid JSON or message schema"
+          },
+          "413": {
+            "description": "Request exceeds size limits"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          },
+          "502": {
+            "description": "All configured providers failed"
+          },
+          "503": {
+            "description": "No provider API keys are configured"
+          }
+        }
+      }
+    }
+  }
+}\n
