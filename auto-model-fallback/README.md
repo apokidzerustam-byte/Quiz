@@ -1,55 +1,64 @@
 # Auto Model Fallback
 
-A remote MCP server for ChatGPT that sends a supplied task to free-tier model APIs in order, skipping providers that are unavailable, rate-limited, or out of quota.
+A remote MCP server that ChatGPT can call as an external tool. It runs the submitted task against a sequence of free-tier model APIs and switches provider when one fails, is rate-limited, or has exhausted its quota.
 
-## Important limitation
+## Important: what this does and does not do
 
-This MCP app cannot intercept, inspect, or replace the model that powers ChatGPT itself, and it cannot detect when your ChatGPT subscription/message quota is exhausted. ChatGPT calls the MCP tool as an external tool; the MCP server then runs the task independently through configured provider APIs. ChatGPT must be able to connect to custom MCP apps on your plan/workspace. Current ChatGPT documentation limits full custom MCP write-capable connections to supported plans/workspaces; check Settings > Apps / Plugins on ChatGPT web.
+This service **does not intercept ChatGPT's internal model calls**, detect ChatGPT message limits, or change the model selected by ChatGPT. ChatGPT must explicitly call the `run_task` MCP tool. The server then runs that task separately using provider APIs and returns the result to ChatGPT.
 
-## Free-only behavior
+Free provider quotas are finite, may change, and are not guaranteed to be available continuously. This app never configures paid models as fallback.
 
-- Only provider APIs explicitly configured by you are used.
-- No paid model fallback is included.
-- OpenRouter is restricted by default to a model ID ending in `:free`.
-- Groq and Gemini use their free-tier API quotas; those quotas and availability are controlled by each provider and can change.
-- If every free provider is exhausted or unavailable, the tool returns an error instead of making a paid request.
-- Provider keys are read from server-side environment variables and are never returned by the status tool.
+## Providers
 
-## Configure
+Providers are tried in this order when their keys are configured:
 
-Deploy this Next.js app to Vercel, then add one or more API keys under Project Settings → Environment Variables:
+1. OpenRouter `openrouter/free` — dynamic free-model pool.
+2. Groq — free-tier API model.
+3. Z.AI — GLM Flash free model.
+4. Google Gemini API — optional; check regional eligibility, quotas, and free-tier data-use terms before sending private information.
 
-| Variable | Purpose |
-| --- | --- |
-| `OPENROUTER_API_KEY` | Optional OpenRouter key; default model is a free model |
-| `OPENROUTER_MODEL` | Optional free model ID; must be a free model on your OpenRouter account |
-| `GROQ_API_KEY` | Optional Groq free-tier key |
-| `GROQ_MODEL` | Optional Groq model ID |
-| `GEMINI_API_KEY` | Optional Google AI Studio free-tier key |
-| `GEMINI_MODEL` | Optional Gemini model ID |
-| `APP_URL` | Optional public URL used in OpenRouter request metadata |
+The router only enables a provider when its server-side API key exists. It does not ask for a payment method or configure paid models.
 
-At least one provider key is required. Do not add billing or paid models if you want to retain the free-only guarantee.
+## Environment variables
 
-## MCP endpoint
+Set these in Vercel Project Settings → Environment Variables. Use encrypted/sensitive values and never paste keys into chat or commit them to GitHub.
 
-After deployment, configure the public endpoint `https://YOUR-DOMAIN/api/mcp` in ChatGPT's custom MCP app settings.
+| Variable | Required | Notes |
+| --- | --- | --- |
+| `OPENROUTER_API_KEY` | Optional | Uses the `openrouter/free` route, not a paid model. Free route is rate-limited. |
+| `GROQ_API_KEY` | Optional | Uses `llama-3.3-70b-versatile` by default. |
+| `GROQ_MODEL` | Optional | Only override with a model that is free on your Groq account. |
+| `ZAI_API_KEY` | Optional | Uses `glm-4.7-flash`. |
+| `GEMINI_API_KEY` | Optional | Google AI Studio key; check EEA availability and data handling first. |
+| `GEMINI_MODEL` | Optional | Only override with a model that is free on your Google AI Studio account. |
+| `APP_URL` | Optional | Public app URL for OpenRouter request metadata. |
 
-Tools:
-- `run_task(task, context?)`: executes the task using the first working configured free provider.
-- `fallback_status()`: reports configured providers without exposing secrets.
+At least one API key is required. To preserve the $0 policy, do not configure a paid model or paid provider key. The router cannot guarantee a provider will never change its pricing; review provider pricing periodically.
+
+## MCP tools
+
+Endpoint: `https://YOUR-VERCEL-DOMAIN/api/mcp`
+
+- `run_task(task, context?)`: execute a task using the first working configured free provider.
+- `fallback_status()`: show configured providers and missing key names without revealing secrets.
+
+## ChatGPT connection
+
+ChatGPT must support custom MCP connections for your plan/workspace. Current OpenAI documentation says full MCP with write/modify support is available to Business, Enterprise, and Edu; Pro has read/fetch-only custom MCP access. Free accounts cannot use this custom MCP connection path at present. The service can still be used by another MCP client or through its own API client.
 
 ## Local development
 
 ```bash
 npm install
 npm run dev
-```
-
-## Tests
-
-```bash
+npm test
 npm run build
 ```
 
-Before production use, test each provider key with a small request and verify that exhausted/invalid keys cause the router to continue to the next provider.
+## Security
+
+- API keys are read only from server-side environment variables.
+- The MCP status tool never returns secret values.
+- The endpoint does not expose a generic proxy or arbitrary URL fetch.
+- Provider calls time out after 45 seconds.
+- No paid fallback is present.
