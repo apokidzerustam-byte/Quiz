@@ -1,0 +1,25 @@
+name: Auto Model Fallback CI
+on:
+  push:
+    paths:
+      - "auto-model-fallback/**"
+  pull_request:
+    paths:
+      - "auto-model-fallback/**"
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: auto-model-fallback
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: auto-model-fallback/package-lock.json
+      - run: npm install
+      - run: npm test
+      - run: npm run build
